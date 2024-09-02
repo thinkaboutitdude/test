@@ -5,6 +5,7 @@ import wandb
 import os
 import numpy as np
 import gymnasium as gym
+import matplotlib.pyplot as plt
 
 from functools import partial
 from dataclasses import dataclass, asdict
@@ -32,7 +33,7 @@ class TrainConfig:
     seq_len: int = 100
     num_episodes = 20
     episode_steps = 100
-    eval_every: int = 100
+    eval_every: int = 1000
     layer_norm_bias: bool = True
     token_embed_dim: int = 128
     d_model: int = 512
@@ -88,8 +89,8 @@ def eval_random(ucbconfig: UCBConfig):
     """
     _, eval_envs = generate_envs(ucbconfig)
     algo = Random(ucbconfig.num_arms)
-    _, returns_sum = generate_trajectories(eval_envs, algo, ucbconfig, mode='eval')
-    return returns_sum
+    _, mean_returns = generate_trajectories(eval_envs, algo, ucbconfig, mode='eval')
+    return mean_returns
 
 @torch.no_grad()
 def evaluate_in_context(
@@ -112,6 +113,7 @@ def evaluate_in_context(
     rewards = torch.zeros(
         (config.seq_len, len(eval_envs)), dtype=torch.long, device=config.device
     )
+    mean_returns = [0]
     returns = np.zeros(vec_env.num_envs)
 
     for istep in trange(config.seq_len, desc="Eval ..."):
@@ -143,9 +145,10 @@ def evaluate_in_context(
         rewards = rewards.roll(-1, dims=0)
         actions[-1] = action
         rewards[-1] = torch.from_numpy(reward).type(torch.long).to(config.device)
-        returns += reward
+        returns = reward
+        mean_returns.append(mean_returns[-1] + returns.mean())
 
-    return sum(returns)
+    return np.array(mean_returns)
 
 
 def next_dataloader(dataloader: DataLoader):
@@ -163,7 +166,7 @@ def train(config: TrainConfig, ucbconfig: UCBConfig):
     This is main train function
     """
     set_seed(seed=config.train_seed)
-    wandb.init(project='ad_rl', config=asdict(config))
+    wandb.init(project='ad_rl_2', config=asdict(config))
     dataset = SequenceData(data_path=config.histories_path, context_len=config.seq_len)
     dataloader = DataLoader(
         dataset=dataset,
@@ -238,18 +241,19 @@ def train(config: TrainConfig, ucbconfig: UCBConfig):
         if global_step % config.eval_every == 0:
             model.eval()
 
-            returns = evaluate_in_context(config=config, ucbconfig=ucbconfig, model=model)
-
-            returns_random = eval_random(ucbconfig)
-
+            mean_returns = evaluate_in_context(config=config, ucbconfig=ucbconfig, model=model)
+            plt.plot(mean_returns)
             wandb.log(
                 {
-                    f'returns_sum_ad': returns, 
+                    f'returns_sum_ad_{global_step}': plt, 
                 }
             )
+
+            mean_returns_random = eval_random(ucbconfig)
+            plt.plot(mean_returns_random)
             wandb.log(
                 {
-                    f'returns_sum_random':  returns_random
+                    f'returns_sum_random_{global_step}': plt
                 }
             )
             model.train()

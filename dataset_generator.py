@@ -16,11 +16,11 @@ class UCBConfig:
     Config for dataset generation
     """
     env_name: str = 'MultiArmedBanditBernoulli'
-    num_train_envs: int = 30
-    num_eval_envs: int = 20
+    num_train_envs: int = 5000
+    num_eval_envs: int = 100
     ucb_alpha: float = 2.0
     num_arms: int = 10
-    train_steps: int = 5000
+    train_steps: int = 100
     context_len: int = 100
     train_seed: int = 1
     eval_seed: int = 0
@@ -46,7 +46,7 @@ def generate_trajectories(envs: List[gym.Env], algo: UCB, config: UCBConfig, mod
     steps = config.train_steps
     if mode == 'eval':
         steps = config.context_len
-    returns = 0
+    returns = np.zeros(len(envs), steps)
     for env_index in range(len(envs)):
         if mode == 'train':
             state, _ = envs[env_index].reset(seed=config.train_seed)
@@ -58,11 +58,14 @@ def generate_trajectories(envs: List[gym.Env], algo: UCB, config: UCBConfig, mod
             new_state, reward, term, trunc, info = envs[env_index].step(action)
             algo.update_state(action, reward)
             history.extend([state, action, reward])
-            returns += reward
+            returns[env_index, step] += reward
             state = new_state
         total_history.append(history)
     total_history = np.array(total_history)
-    return total_history, returns
+    mean_returns = [0]
+    for step in range(steps):
+        mean_returns.append(mean_returns[-1] + returns[:, step].mean())
+    return total_history, np.array(mean_returns)
 
 @pyrallis.wrap()
 def main(config: UCBConfig):
