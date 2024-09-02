@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from functools import partial
 from dataclasses import dataclass, asdict
-from data.dataset import SequenceData
+from data.dataset import SequenceDataset
 from torch.utils.data import DataLoader
 from algos.transformer.model import Model, ModelConfig
 from algos.transformer.schedule import cosine_annealing_with_warmup
@@ -52,7 +52,7 @@ class TrainConfig:
     label_smoothing: float = 0.02
 
     device: str = "cuda"
-    histories_path: str = 'trajectories.npz'
+    histories_path: str = 'trajectories/ucb'
     checkpoint_path: str = 'checkpoints'
 
 def make_env(env: gym.Env):
@@ -167,7 +167,7 @@ def train(config: TrainConfig, ucbconfig: UCBConfig):
     """
     set_seed(seed=config.train_seed)
     wandb.init(project='ad_rl_2', config=asdict(config))
-    dataset = SequenceData(data_path=config.histories_path, context_len=config.seq_len)
+    dataset = SequenceDataset(runs_path=config.learning_histories_path, seq_len=config.seq_len)
     dataloader = DataLoader(
         dataset=dataset,
         batch_size=config.batch_size,

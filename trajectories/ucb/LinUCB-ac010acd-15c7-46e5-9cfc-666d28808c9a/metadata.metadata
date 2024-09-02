@@ -1,0 +1,7 @@
+{
+  "algorithm": "LinUCB",
+  "label": "label",
+  "ordered_trajectories": [
+    "trajectories_100.npz"
+  ]
+}
